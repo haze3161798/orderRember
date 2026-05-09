@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useSessionsStore } from '../stores/sessions'
-import { computeMemberSubtotals, computeSessionTotal } from '../utils/calc'
+import { computeMemberSubtotals, computeSessionTotal, itemTotal } from '../utils/calc'
 
 const props = defineProps({ sessionId: { type: String, required: true } })
 const emit = defineEmits(['back'])
@@ -52,7 +52,17 @@ function handleAddMember() {
 
 const itemDrawerVisible = ref(false)
 const editingItemId = ref(null)
-const itemForm = ref({ name: '', price: 0, mode: 'personal', assignedTo: [] })
+const itemForm = ref({
+  name: '',
+  price: 0,
+  quantity: 1,
+  mode: 'personal',
+  assignedTo: []
+})
+
+const itemFormSubtotal = computed(
+  () => (itemForm.value.price || 0) * (itemForm.value.quantity || 1)
+)
 
 function openAddItem() {
   if (!session.value || session.value.members.length === 0) {
@@ -63,6 +73,7 @@ function openAddItem() {
   itemForm.value = {
     name: '',
     price: 0,
+    quantity: 1,
     mode: 'personal',
     assignedTo: []
   }
@@ -74,6 +85,7 @@ function openEditItem(item) {
   itemForm.value = {
     name: item.name,
     price: item.price,
+    quantity: item.quantity ?? 1,
     mode: item.assignedTo.length > 1 ? 'shared' : 'personal',
     assignedTo: [...item.assignedTo]
   }
@@ -98,6 +110,10 @@ function handleSaveItem() {
     ElMessage.warning('金額需大於 0')
     return
   }
+  if (!f.quantity || f.quantity < 1) {
+    ElMessage.warning('數量至少為 1')
+    return
+  }
   if (f.assignedTo.length === 0) {
     ElMessage.warning('請選擇歸屬成員')
     return
@@ -106,6 +122,7 @@ function handleSaveItem() {
   const data = {
     name,
     price: f.price,
+    quantity: f.quantity,
     assignedTo: [...f.assignedTo]
   }
 
@@ -127,9 +144,9 @@ function handleDeleteItem() {
 <template>
   <div v-if="session" class="min-h-screen bg-gray-50 flex flex-col">
     <header class="sticky top-0 bg-white shadow-sm z-10">
-      <div class="px-2 py-2 flex items-center gap-1">
-        <el-button link size="large" @click="emit('back')">
-          <span class="text-xl">←</span>
+      <div class="px-3 py-2 flex items-center gap-2">
+        <el-button size="default" @click="emit('back')">
+          ← 返回
         </el-button>
         <h1 class="text-base font-semibold flex-1 truncate">{{ session.name }}</h1>
       </div>
@@ -211,12 +228,21 @@ function handleDeleteItem() {
             @click="openEditItem(item)"
           >
             <div class="flex items-baseline justify-between gap-2">
-              <span class="font-medium truncate">{{ item.name }}</span>
+              <span class="font-medium truncate">
+                {{ item.name }}
+                <span
+                  v-if="(item.quantity ?? 1) > 1"
+                  class="text-xs text-gray-500 ml-1 font-normal"
+                >× {{ item.quantity }}</span>
+              </span>
               <span class="font-semibold whitespace-nowrap">
-                NT$ {{ item.price }}
+                NT$ {{ itemTotal(item) }}
               </span>
             </div>
             <div class="text-xs text-gray-500 mt-1">
+              <template v-if="(item.quantity ?? 1) > 1">
+                <span class="mr-2">單價 NT$ {{ item.price }}</span>
+              </template>
               <template v-if="item.assignedTo.length === 1">
                 🧍 {{ memberName(item.assignedTo[0]) }}
               </template>
@@ -224,7 +250,8 @@ function handleDeleteItem() {
                 👥 {{ item.assignedTo.length }} 人共用：{{
                   item.assignedTo.map(memberName).join('、')
                 }}
-                · 每人約 NT$ {{ Math.round(item.price / item.assignedTo.length) }}
+                · 每人約 NT$
+                {{ Math.round(itemTotal(item) / item.assignedTo.length) }}
               </template>
             </div>
           </div>
@@ -304,16 +331,36 @@ function handleDeleteItem() {
             maxlength="30"
           />
         </div>
-        <div>
-          <label class="block text-sm text-gray-600 mb-1">金額 (NT$)</label>
-          <el-input-number
-            v-model="itemForm.price"
-            :min="0"
-            :step="10"
-            size="large"
-            class="!w-full"
-            controls-position="right"
-          />
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-sm text-gray-600 mb-1">單價 (NT$)</label>
+            <el-input-number
+              v-model="itemForm.price"
+              :min="0"
+              :step="10"
+              size="large"
+              class="!w-full"
+              controls-position="right"
+            />
+          </div>
+          <div class="w-32">
+            <label class="block text-sm text-gray-600 mb-1">數量</label>
+            <el-input-number
+              v-model="itemForm.quantity"
+              :min="1"
+              :step="1"
+              :precision="0"
+              size="large"
+              class="!w-full"
+              controls-position="right"
+            />
+          </div>
+        </div>
+        <div
+          v-if="itemForm.quantity > 1 && itemForm.price > 0"
+          class="text-sm text-gray-500 -mt-2"
+        >
+          小計：NT$ {{ itemFormSubtotal }}
         </div>
         <div>
           <label class="block text-sm text-gray-600 mb-2">歸屬</label>

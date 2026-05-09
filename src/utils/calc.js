@@ -1,3 +1,7 @@
+export function itemTotal(item) {
+  return item.price * (item.quantity ?? 1)
+}
+
 export function computeMemberSubtotals(session) {
   const totals = {}
   session.members.forEach((m) => {
@@ -9,8 +13,9 @@ export function computeMemberSubtotals(session) {
     const n = assignees.length
     if (n === 0) return
 
-    const baseShare = Math.floor(item.price / n)
-    const remainder = item.price - baseShare * n
+    const total = itemTotal(item)
+    const baseShare = Math.floor(total / n)
+    const remainder = total - baseShare * n
     assignees.forEach((memberId, idx) => {
       totals[memberId] += baseShare + (idx < remainder ? 1 : 0)
     })
@@ -20,5 +25,5 @@ export function computeMemberSubtotals(session) {
 }
 
 export function computeSessionTotal(session) {
-  return session.items.reduce((sum, it) => sum + it.price, 0)
+  return session.items.reduce((sum, it) => sum + itemTotal(it), 0)
 }
